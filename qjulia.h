@@ -9,16 +9,14 @@
 #define k_app_resx 1024
 #define k_app_resy 1024
 
-struct system_state;
-typedef struct system_state system_state_t;
-
-typedef struct application_state
+struct system_state_t;
+struct application_state_t
 {
     int resolution[2];
     double time, time_delta;
     unsigned char *displayptr;
     system_state_t *sys_state;
-} application_state_t;
+};
 
-double sys_get_time(void);
+double sys_get_time();
 void sys_display_text(system_state_t *sys, const char *text);

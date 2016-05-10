@@ -1,17 +1,17 @@
 ﻿//-----------------------------------------------------------------------------
 #include "qjulia.h"
-#include "qjulia.c"
+#include "qjulia.cpp"
 
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
 //-----------------------------------------------------------------------------
-typedef struct system_state
+struct system_state_t
 {
     HWND hwnd;
     HDC hdc, mdc;
     HBITMAP hbm;
-} system_state_t;
+};
 //-----------------------------------------------------------------------------
 static LRESULT CALLBACK
 winproc(HWND win, UINT msg, WPARAM wparam, LPARAM lparam)
@@ -27,10 +27,10 @@ winproc(HWND win, UINT msg, WPARAM wparam, LPARAM lparam)
 
 //-----------------------------------------------------------------------------
 static double
-sys_get_time(void)
+sys_get_time()
 {
-    static LARGE_INTEGER freq = { 0 };
-    static LARGE_INTEGER counter0 = { 0 };
+    static LARGE_INTEGER freq = {};
+    static LARGE_INTEGER counter0 = {};
 
     if (freq.QuadPart == 0) {
         QueryPerformanceFrequency(&freq);
@@ -52,12 +52,11 @@ win_init(application_state_t *app)
 {
     system_state_t *sys = app->sys_state;
 
-    WNDCLASS winclass = {
-        .lpfnWndProc = winproc,
-        .hInstance = GetModuleHandle(NULL),
-        .hCursor = LoadCursor(NULL, IDC_ARROW),
-        .lpszClassName = k_app_name
-    };
+    WNDCLASS winclass = {};
+    winclass.lpfnWndProc = winproc;
+    winclass.hInstance = GetModuleHandle(NULL);
+    winclass.hCursor = LoadCursor(NULL, IDC_ARROW);
+    winclass.lpszClassName = k_app_name;
     if (!RegisterClass(&winclass)) return 0;
 
     RECT rect = { 0, 0, app->resolution[0], app->resolution[1] };
@@ -110,11 +109,11 @@ win_update(application_state_t *app)
 int
 main(void)
 {
-    system_state_t sys_state = { 0 };
-    application_state_t app_state = {
-        .resolution = { k_app_resx, k_app_resy },
-        .sys_state = &sys_state
-    };
+    system_state_t sys_state = {};
+    application_state_t app_state = {};
+    app_state.resolution[0] = k_app_resx;
+    app_state.resolution[1] = k_app_resy;
+    app_state.sys_state = &sys_state;
 
     if (!win_init(&app_state)) {
         win_deinit(&sys_state);
