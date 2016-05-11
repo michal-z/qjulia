@@ -20,3 +20,5 @@ struct application_state_t
 
 double sys_get_time();
 void sys_display_text(system_state_t *sys, const char *text);
+
+#include "qjulia_math.h"

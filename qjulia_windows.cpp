@@ -24,7 +24,6 @@ winproc(HWND win, UINT msg, WPARAM wparam, LPARAM lparam)
     }
     return DefWindowProc(win, msg, wparam, lparam);
 }
-
 //-----------------------------------------------------------------------------
 static double
 sys_get_time()

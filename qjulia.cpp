@@ -1,20 +1,3 @@
-#include "qjulia.h"
-
-struct vec3_t
-{
-    double x, y, z;
-};
-//-----------------------------------------------------------------------------
-static inline vec3_t
-operator+(vec3_t &v0, vec3_t &v1)
-{
-    vec3_t r;
-    r.x = v0.x + v1.x;
-    r.y = v0.y + v1.y;
-    r.z = v0.z + v1.z;
-    return r;
-}
-//-----------------------------------------------------------------------------
 static void
 update_frame_stats(application_state_t *app)
 {
@@ -42,15 +25,19 @@ update_frame_stats(application_state_t *app)
     }
     fps_frame++;
 }
-//-----------------------------------------------------------------------------
+
 static void
 update(application_state_t *app)
 {
-    vec3_t v0 = { 1.0, 2.0, 3.0 };
-    vec3_t v1 = { 1.0, 2.0, 3.0 };
-    vec3_t v2 = v0 + v1;
-
     update_frame_stats(app);
-    memset(app->displayptr, 0xff, app->resolution[0] * app->resolution[1] * 4);
+
+    for (size_t y = 0; y < app->resolution[1]; ++y) {
+        for (size_t x = 0; x < app->resolution[0]; ++x) {
+            size_t idx = (x + y * app->resolution[0]) * 4;
+            app->displayptr[idx] = 0;
+            app->displayptr[idx + 1] = 0;
+            app->displayptr[idx + 2] = (unsigned char)(255.0 * sin((double)x));
+            app->displayptr[idx + 3] = 255;
+        }
+    }
 }
-//-----------------------------------------------------------------------------
