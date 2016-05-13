@@ -6,7 +6,7 @@ struct vec3_t
 };
 
 static inline vec3_t
-vec3_make(double x, double y, double z)
+vec3(double x, double y, double z)
 {
     vec3_t r = { x, y, z };
     return r;
