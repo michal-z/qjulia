@@ -4,8 +4,17 @@
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
+#include <process.h>
 
 #define k_max_thread_count 16
+
+struct thread_context_t
+{
+    HANDLE h;
+    uint32_t id;
+    HANDLE done_event;
+    system_context_t *sys;
+};
 
 struct system_context_t
 {
@@ -13,11 +22,16 @@ struct system_context_t
     HDC hdc, mdc;
     HBITMAP hbm;
 
-    HANDLE main_thread_semaphore;
+    HANDLE render_semaphore;
     uint32_t thread_count;
-    HANDLE thread[k_max_thread_count];
-    HANDLE thread_done_event[k_max_thread_count];
+    thread_context_t thread[k_max_thread_count];
 };
+
+static uint32_t WINAPI
+render_thread(void *context)
+{
+    return 0;
+}
 
 static LRESULT CALLBACK
 winproc(HWND win, UINT msg, WPARAM wparam, LPARAM lparam)
@@ -90,6 +104,23 @@ win_init(application_context_t *app)
     sys->hbm = CreateDIBSection(sys->hdc, &bi, DIB_RGB_COLORS, (void **)&app->displayptr, NULL, 0);
 
     if (!SelectObject(sys->mdc, sys->hbm)) return false;
+
+    sys->render_semaphore = CreateSemaphore(NULL, 0, sys->thread_count, NULL);
+    if (!sys->render_semaphore) return false;
+
+    for (uint32_t i = 0; i < sys->thread_count; ++i) {
+        sys->thread[i].sys = sys;
+        sys->thread[i].h = NULL;
+        sys->thread[i].id = i;
+        sys->thread[i].done_event = CreateEventEx(NULL, NULL, 0, EVENT_ALL_ACCESS);
+        if (!sys->thread[i].done_event) return false;
+    }
+    for (uint32_t i = 0; i < sys->thread_count; ++i) {
+        sys->thread[i].h = (HANDLE)_beginthreadex(NULL, 0, render_thread,
+                                                  &sys->thread[i], 0, NULL);
+        if (!sys->thread[i].h) return false;
+    }
+
     return true;
 }
 
@@ -119,6 +150,10 @@ main()
     app.resolution[0] = k_app_resx;
     app.resolution[1] = k_app_resy;
     app.sys = &sys;
+
+    SYSTEM_INFO si;
+    GetSystemInfo(&si);
+    sys.thread_count = (uint32_t)si.dwNumberOfProcessors;
 
     if (!win_init(&app)) {
         win_deinit(&sys);
