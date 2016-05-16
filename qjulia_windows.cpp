@@ -5,11 +5,18 @@
 #define NOMINMAX
 #include <windows.h>
 
-struct system_state_t
+#define k_max_thread_count 16
+
+struct system_context_t
 {
     HWND hwnd;
     HDC hdc, mdc;
     HBITMAP hbm;
+
+    HANDLE main_thread_semaphore;
+    uint32_t thread_count;
+    HANDLE thread[k_max_thread_count];
+    HANDLE thread_done_event[k_max_thread_count];
 };
 
 static LRESULT CALLBACK
@@ -40,15 +47,17 @@ sys_get_time()
 }
 
 static void
-sys_display_text(system_state_t *sys, const char *text)
+sys_display_text(system_context_t *sys, const char *text)
 {
+    assert(sys && text);
     SetWindowText(sys->hwnd, text);
 }
 
 static bool
-win_init(application_state_t *app)
+win_init(application_context_t *app)
 {
-    system_state_t *sys = app->sys_state;
+    assert(app && app->sys);
+    system_context_t *sys = app->sys;
 
     WNDCLASS winclass = {};
     winclass.lpfnWndProc = winproc;
@@ -85,8 +94,9 @@ win_init(application_state_t *app)
 }
 
 static void
-win_deinit(system_state_t *sys)
+win_deinit(system_context_t *sys)
 {
+    assert(sys);
     if (sys->hdc) {
         ReleaseDC(sys->hwnd, sys->hdc);
         sys->hdc = NULL;
@@ -94,23 +104,24 @@ win_deinit(system_state_t *sys)
 }
 
 static void
-win_update(application_state_t *app)
+win_update(application_context_t *app)
 {
-    BitBlt(app->sys_state->hdc, 0, 0, app->resolution[0], app->resolution[1],
-           app->sys_state->mdc, 0, 0, SRCCOPY);
+    assert(app && app->sys);
+    BitBlt(app->sys->hdc, 0, 0, app->resolution[0], app->resolution[1],
+           app->sys->mdc, 0, 0, SRCCOPY);
 }
 
 int
-main(void)
+main()
 {
-    system_state_t sys_state = {};
-    application_state_t app_state = {};
-    app_state.resolution[0] = k_app_resx;
-    app_state.resolution[1] = k_app_resy;
-    app_state.sys_state = &sys_state;
+    system_context_t sys = {};
+    application_context_t app = {};
+    app.resolution[0] = k_app_resx;
+    app.resolution[1] = k_app_resy;
+    app.sys = &sys;
 
-    if (!win_init(&app_state)) {
-        win_deinit(&sys_state);
+    if (!win_init(&app)) {
+        win_deinit(&sys);
         return 1;
     }
 
@@ -120,11 +131,11 @@ main(void)
             DispatchMessage(&msg);
             if (msg.message == WM_QUIT) break;
         } else {
-            update(&app_state);
-            win_update(&app_state);
+            update(&app);
+            win_update(&app);
         }
     }
 
-    win_deinit(&sys_state);
+    win_deinit(&sys);
     return 0;
 }

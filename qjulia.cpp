@@ -1,5 +1,5 @@
 static void
-update_frame_stats(application_state_t *app)
+update_frame_stats(application_context_t *app)
 {
     static double prev_time = -1.0;
     static double prev_fps_time = 0.0;
@@ -19,7 +19,7 @@ update_frame_stats(application_state_t *app)
         double us = (1.0 / fps) * 1000000.0;
         char text[256];
         snprintf(text, sizeof(text), "[%d fps  %d us] %s", (int)fps, (int)us, k_app_name);
-        sys_display_text(app->sys_state, text);
+        sys_display_text(app->sys, text);
         prev_fps_time = app->time;
         fps_frame = 0;
     }
@@ -27,7 +27,7 @@ update_frame_stats(application_state_t *app)
 }
 
 static void
-update(application_state_t *app)
+update(application_context_t *app)
 {
     update_frame_stats(app);
 
