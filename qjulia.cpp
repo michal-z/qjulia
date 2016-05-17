@@ -41,3 +41,8 @@ update(application_context_t *app)
         }
     }
 }
+
+static void
+render_one_tile(uint32_t tileid)
+{
+}

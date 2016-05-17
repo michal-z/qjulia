@@ -22,19 +22,43 @@ struct system_context_t
     HDC hdc, mdc;
     HBITMAP hbm;
 
+    HANDLE quit_event;
     HANDLE render_semaphore;
     uint32_t thread_count;
     thread_context_t thread[k_max_thread_count];
 };
 
-static uint32_t WINAPI
-render_thread(void *context)
+static void
+win_render(thread_context_t *thread)
 {
+    assert(thread);
+
+    for (;;) {
+    }
+}
+
+static uint32_t WINAPI
+win_render_thread(void *context)
+{
+    thread_context_t *thread = (thread_context_t *)context;
+    assert(thread && thread->sys);
+
+    HANDLE wait[2] = { thread->sys->quit_event, thread->sys->render_semaphore };
+
+    for (;;) {
+        DWORD r = WaitForMultipleObjects(2, wait, FALSE, INFINITE);
+        if (r == WAIT_OBJECT_0) break;
+
+        win_render(thread);
+
+        SetEvent(thread->done_event);
+    }
+
     return 0;
 }
 
 static LRESULT CALLBACK
-winproc(HWND win, UINT msg, WPARAM wparam, LPARAM lparam)
+win_message_handler(HWND win, UINT msg, WPARAM wparam, LPARAM lparam)
 {
     switch (msg) {
         case WM_DESTROY:
@@ -74,19 +98,20 @@ win_init(application_context_t *app)
     system_context_t *sys = app->sys;
 
     WNDCLASS winclass = {};
-    winclass.lpfnWndProc = winproc;
+    winclass.lpfnWndProc = win_message_handler;
     winclass.hInstance = GetModuleHandle(NULL);
     winclass.hCursor = LoadCursor(NULL, IDC_ARROW);
     winclass.lpszClassName = k_app_name;
     if (!RegisterClass(&winclass)) return false;
 
     RECT rect = { 0, 0, app->resolution[0], app->resolution[1] };
-    if (!AdjustWindowRect(&rect, WS_OVERLAPPED | WS_SYSMENU | WS_CAPTION | WS_MINIMIZEBOX, FALSE))
+    if (!AdjustWindowRect(&rect, WS_OVERLAPPED | WS_SYSMENU | WS_CAPTION | WS_MINIMIZEBOX,
+                          FALSE))
         return false;
 
     sys->hwnd = CreateWindow(k_app_name, k_app_name,
-                             WS_OVERLAPPED | WS_SYSMENU | WS_CAPTION | WS_MINIMIZEBOX | WS_VISIBLE,
-                             CW_USEDEFAULT, CW_USEDEFAULT,
+                             WS_OVERLAPPED | WS_SYSMENU | WS_CAPTION | WS_MINIMIZEBOX |
+                             WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT,
                              rect.right - rect.left, rect.bottom - rect.top,
                              NULL, NULL, NULL, 0);
     if (!sys->hwnd) return false;
@@ -101,9 +126,14 @@ win_init(application_context_t *app)
     bi.bmiHeader.biHeight = -app->resolution[1];
     bi.bmiHeader.biSizeImage = app->resolution[0] * app->resolution[1];
     sys->mdc = CreateCompatibleDC(sys->hdc);
-    sys->hbm = CreateDIBSection(sys->hdc, &bi, DIB_RGB_COLORS, (void **)&app->displayptr, NULL, 0);
+    sys->hbm = CreateDIBSection(sys->hdc, &bi, DIB_RGB_COLORS, (void **)&app->displayptr,
+                                NULL, 0);
 
     if (!SelectObject(sys->mdc, sys->hbm)) return false;
+
+
+    sys->quit_event = CreateEventEx(NULL, NULL, CREATE_EVENT_MANUAL_RESET, EVENT_ALL_ACCESS);
+    if (!sys->quit_event) return false;
 
     sys->render_semaphore = CreateSemaphore(NULL, 0, sys->thread_count, NULL);
     if (!sys->render_semaphore) return false;
@@ -116,7 +146,7 @@ win_init(application_context_t *app)
         if (!sys->thread[i].done_event) return false;
     }
     for (uint32_t i = 0; i < sys->thread_count; ++i) {
-        sys->thread[i].h = (HANDLE)_beginthreadex(NULL, 0, render_thread,
+        sys->thread[i].h = (HANDLE)_beginthreadex(NULL, 0, win_render_thread,
                                                   &sys->thread[i], 0, NULL);
         if (!sys->thread[i].h) return false;
     }
@@ -135,11 +165,19 @@ win_deinit(system_context_t *sys)
 }
 
 static void
-win_update(application_context_t *app)
+win_update(system_context_t *sys, int32_t resx, int32_t resy)
 {
-    assert(app && app->sys);
-    BitBlt(app->sys->hdc, 0, 0, app->resolution[0], app->resolution[1],
-           app->sys->mdc, 0, 0, SRCCOPY);
+    assert(sys);
+
+    ReleaseSemaphore(sys->render_semaphore, sys->thread_count, NULL);
+
+    HANDLE done[k_max_thread_count];
+    for (uint32_t i = 0; i < sys->thread_count; ++i) {
+        done[i] = sys->thread[i].done_event;
+    }
+    WaitForMultipleObjects(sys->thread_count, done, TRUE, INFINITE);
+
+    BitBlt(sys->hdc, 0, 0, resx, resy, sys->mdc, 0, 0, SRCCOPY);
 }
 
 int
@@ -167,7 +205,7 @@ main()
             if (msg.message == WM_QUIT) break;
         } else {
             update(&app);
-            win_update(&app);
+            win_update(&sys, app.resolution[0], app.resolution[1]);
         }
     }
 
