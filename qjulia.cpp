@@ -30,19 +30,23 @@ static void
 update(application_context_t *app)
 {
     update_frame_stats(app);
+}
 
-    for (size_t y = 0; y < app->resolution[1]; ++y) {
-        for (size_t x = 0; x < app->resolution[0]; ++x) {
-            size_t idx = (x + y * app->resolution[0]) * 4;
+static void
+render_tile(application_context_t *app, uint32_t tileid)
+{
+    size_t x0 = (tileid % k_tile_xcount) * k_tile_size;
+    size_t y0 = (tileid / k_tile_xcount) * k_tile_size;
+    size_t x1 = x0 + k_tile_size;
+    size_t y1 = y0 + k_tile_size;
+
+    for (size_t y = y0; y < y1; ++y) {
+        for (size_t x = x0; x < x1; ++x) {
+            size_t idx = (x + y * k_app_resx) * 4;
             app->displayptr[idx] = 0;
             app->displayptr[idx + 1] = 0;
             app->displayptr[idx + 2] = (unsigned char)(255.0 * sin((double)x));
             app->displayptr[idx + 3] = 255;
         }
     }
-}
-
-static void
-render_one_tile(uint32_t tileid)
-{
 }

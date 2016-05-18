@@ -13,7 +13,7 @@ struct thread_context_t
     HANDLE h;
     uint32_t id;
     HANDLE done_event;
-    system_context_t *sys;
+    application_context_t *app;
 };
 
 struct system_context_t
@@ -26,30 +26,28 @@ struct system_context_t
     HANDLE render_semaphore;
     uint32_t thread_count;
     thread_context_t thread[k_max_thread_count];
+    volatile long tile_index;
 };
-
-static void
-win_render(thread_context_t *thread)
-{
-    assert(thread);
-
-    for (;;) {
-    }
-}
 
 static uint32_t WINAPI
 win_render_thread(void *context)
 {
     thread_context_t *thread = (thread_context_t *)context;
-    assert(thread && thread->sys);
+    assert(thread && thread->app && thread->app->sys);
 
-    HANDLE wait[2] = { thread->sys->quit_event, thread->sys->render_semaphore };
+    system_context_t *sys = thread->app->sys;
+
+    HANDLE wait[2] = { sys->quit_event, sys->render_semaphore };
 
     for (;;) {
         DWORD r = WaitForMultipleObjects(2, wait, FALSE, INFINITE);
         if (r == WAIT_OBJECT_0) break;
 
-        win_render(thread);
+        for (;;) {
+            uint32_t idx = (uint32_t)_InterlockedExchangeAdd(&sys->tile_index, 1);
+            if (idx >= k_tile_count) break;
+            render_tile(thread->app, idx);
+        }
 
         SetEvent(thread->done_event);
     }
@@ -104,7 +102,7 @@ win_init(application_context_t *app)
     winclass.lpszClassName = k_app_name;
     if (!RegisterClass(&winclass)) return false;
 
-    RECT rect = { 0, 0, app->resolution[0], app->resolution[1] };
+    RECT rect = { 0, 0, k_app_resx, k_app_resy };
     if (!AdjustWindowRect(&rect, WS_OVERLAPPED | WS_SYSMENU | WS_CAPTION | WS_MINIMIZEBOX,
                           FALSE))
         return false;
@@ -122,9 +120,9 @@ win_init(application_context_t *app)
     bi.bmiHeader.biPlanes = 1;
     bi.bmiHeader.biBitCount = 32;
     bi.bmiHeader.biCompression = BI_RGB;
-    bi.bmiHeader.biWidth = app->resolution[0];
-    bi.bmiHeader.biHeight = -app->resolution[1];
-    bi.bmiHeader.biSizeImage = app->resolution[0] * app->resolution[1];
+    bi.bmiHeader.biWidth = k_app_resx;
+    bi.bmiHeader.biHeight = -k_app_resy;
+    bi.bmiHeader.biSizeImage = k_app_resx * k_app_resy;
     sys->mdc = CreateCompatibleDC(sys->hdc);
     sys->hbm = CreateDIBSection(sys->hdc, &bi, DIB_RGB_COLORS, (void **)&app->displayptr,
                                 NULL, 0);
@@ -139,7 +137,7 @@ win_init(application_context_t *app)
     if (!sys->render_semaphore) return false;
 
     for (uint32_t i = 0; i < sys->thread_count; ++i) {
-        sys->thread[i].sys = sys;
+        sys->thread[i].app = app;
         sys->thread[i].h = NULL;
         sys->thread[i].id = i;
         sys->thread[i].done_event = CreateEventEx(NULL, NULL, 0, EVENT_ALL_ACCESS);
@@ -165,9 +163,11 @@ win_deinit(system_context_t *sys)
 }
 
 static void
-win_update(system_context_t *sys, int32_t resx, int32_t resy)
+win_update(system_context_t *sys)
 {
     assert(sys);
+
+    _InterlockedExchange(&sys->tile_index, 0);
 
     ReleaseSemaphore(sys->render_semaphore, sys->thread_count, NULL);
 
@@ -177,7 +177,7 @@ win_update(system_context_t *sys, int32_t resx, int32_t resy)
     }
     WaitForMultipleObjects(sys->thread_count, done, TRUE, INFINITE);
 
-    BitBlt(sys->hdc, 0, 0, resx, resy, sys->mdc, 0, 0, SRCCOPY);
+    BitBlt(sys->hdc, 0, 0, k_app_resx, k_app_resy, sys->mdc, 0, 0, SRCCOPY);
 }
 
 int
@@ -185,8 +185,6 @@ main()
 {
     system_context_t sys = {};
     application_context_t app = {};
-    app.resolution[0] = k_app_resx;
-    app.resolution[1] = k_app_resy;
     app.sys = &sys;
 
     SYSTEM_INFO si;
@@ -205,7 +203,7 @@ main()
             if (msg.message == WM_QUIT) break;
         } else {
             update(&app);
-            win_update(&sys, app.resolution[0], app.resolution[1]);
+            win_update(&sys);
         }
     }
 

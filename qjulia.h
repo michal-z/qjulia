@@ -11,10 +11,14 @@
 #define k_app_resx 1024
 #define k_app_resy 1024
 
+#define k_tile_size 64
+#define k_tile_xcount (k_app_resx / k_tile_size)
+#define k_tile_ycount (k_app_resy / k_tile_size)
+#define k_tile_count (k_tile_xcount * k_tile_ycount)
+
 struct system_context_t;
 struct application_context_t
 {
-    int32_t resolution[2];
     double time, time_delta;
     uint8_t *displayptr;
     system_context_t *sys;
