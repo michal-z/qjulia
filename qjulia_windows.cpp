@@ -12,7 +12,7 @@ struct thread_context_t
 {
     HANDLE h;
     uint32_t id;
-    HANDLE done_event;
+    HANDLE start_event, done_event;
     application_context_t *app;
 };
 
@@ -23,7 +23,6 @@ struct system_context_t
     HBITMAP hbm;
 
     HANDLE quit_event;
-    HANDLE render_semaphore;
     uint32_t thread_count;
     thread_context_t thread[k_max_thread_count];
     volatile long tile_index;
@@ -37,7 +36,7 @@ win_render_thread(void *context)
 
     system_context_t *sys = thread->app->sys;
 
-    HANDLE wait[2] = { sys->quit_event, sys->render_semaphore };
+    HANDLE wait[2] = { sys->quit_event, thread->start_event };
 
     for (;;) {
         DWORD r = WaitForMultipleObjects(2, wait, FALSE, INFINITE);
@@ -133,15 +132,13 @@ win_init(application_context_t *app)
     sys->quit_event = CreateEventEx(NULL, NULL, CREATE_EVENT_MANUAL_RESET, EVENT_ALL_ACCESS);
     if (!sys->quit_event) return false;
 
-    sys->render_semaphore = CreateSemaphore(NULL, 0, sys->thread_count, NULL);
-    if (!sys->render_semaphore) return false;
-
     for (uint32_t i = 0; i < sys->thread_count; ++i) {
         sys->thread[i].app = app;
         sys->thread[i].h = NULL;
         sys->thread[i].id = i;
+        sys->thread[i].start_event = CreateEventEx(NULL, NULL, 0, EVENT_ALL_ACCESS);
         sys->thread[i].done_event = CreateEventEx(NULL, NULL, 0, EVENT_ALL_ACCESS);
-        if (!sys->thread[i].done_event) return false;
+        if (!sys->thread[i].done_event || !sys->thread[i].start_event) return false;
     }
     for (uint32_t i = 0; i < sys->thread_count; ++i) {
         sys->thread[i].h = (HANDLE)_beginthreadex(NULL, 0, win_render_thread,
@@ -156,6 +153,14 @@ static void
 win_deinit(system_context_t *sys)
 {
     assert(sys);
+
+    // terminate all worker threads
+    SetEvent(sys->quit_event);
+    HANDLE done[k_max_thread_count];
+    for (uint32_t i = 0; i < sys->thread_count; ++i) done[i] = sys->thread[i].h;
+    WaitForMultipleObjects(sys->thread_count, done, TRUE, INFINITE);
+    for (uint32_t i = 0; i < sys->thread_count; ++i) CloseHandle(sys->thread[i].h);
+
     if (sys->hdc) {
         ReleaseDC(sys->hwnd, sys->hdc);
         sys->hdc = NULL;
@@ -169,11 +174,10 @@ win_update(system_context_t *sys)
 
     _InterlockedExchange(&sys->tile_index, 0);
 
-    ReleaseSemaphore(sys->render_semaphore, sys->thread_count, NULL);
-
     HANDLE done[k_max_thread_count];
     for (uint32_t i = 0; i < sys->thread_count; ++i) {
         done[i] = sys->thread[i].done_event;
+        SetEvent(sys->thread[i].start_event);
     }
     WaitForMultipleObjects(sys->thread_count, done, TRUE, INFINITE);
 
