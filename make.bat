@@ -6,7 +6,7 @@ if exist qjulia.exe del qjulia.exe
 if exist *.pdb del *.pdb
 if exist *.obj del *.obj
 
-cl /Zi /Ox /nologo /WX /D_CRT_SECURE_NO_WARNINGS /W3 /EHa- qjulia_windows.cpp ^
+cl /Zi /Ox /DNDEBUG /nologo /WX /D_CRT_SECURE_NO_WARNINGS /W3 /EHa- qjulia_windows.cpp ^
    /link kernel32.lib user32.lib gdi32.lib ^
    /OPT:REF /INCREMENTAL:NO /SUBSYSTEM:CONSOLE /OUT:qjulia.exe
 

@@ -28,6 +28,17 @@ struct system_context_t
     volatile long tile_index;
 };
 
+static void
+win_render(application_context_t *app)
+{
+    assert(app && app->sys);
+    for (;;) {
+        uint32_t idx = (uint32_t)_InterlockedExchangeAdd(&app->sys->tile_index, 1);
+        if (idx >= k_tile_count) break;
+        render_tile(app, idx);
+    }
+}
+
 static uint32_t WINAPI
 win_render_thread(void *context)
 {
@@ -42,11 +53,7 @@ win_render_thread(void *context)
         DWORD r = WaitForMultipleObjects(2, wait, FALSE, INFINITE);
         if (r == WAIT_OBJECT_0) break;
 
-        for (;;) {
-            uint32_t idx = (uint32_t)_InterlockedExchangeAdd(&sys->tile_index, 1);
-            if (idx >= k_tile_count) break;
-            render_tile(thread->app, idx);
-        }
+        win_render(thread->app);
 
         SetEvent(thread->done_event);
     }
@@ -168,9 +175,10 @@ win_deinit(system_context_t *sys)
 }
 
 static void
-win_update(system_context_t *sys)
+win_update(application_context_t *app)
 {
-    assert(sys);
+    assert(app && app->sys);
+    system_context_t *sys = app->sys;
 
     _InterlockedExchange(&sys->tile_index, 0);
 
@@ -179,6 +187,8 @@ win_update(system_context_t *sys)
         done[i] = sys->thread[i].done_event;
         SetEvent(sys->thread[i].start_event);
     }
+    win_render(app);
+
     WaitForMultipleObjects(sys->thread_count, done, TRUE, INFINITE);
 
     BitBlt(sys->hdc, 0, 0, k_app_resx, k_app_resy, sys->mdc, 0, 0, SRCCOPY);
@@ -193,7 +203,7 @@ main()
 
     SYSTEM_INFO si;
     GetSystemInfo(&si);
-    sys.thread_count = (uint32_t)si.dwNumberOfProcessors;
+    sys.thread_count = (uint32_t)(si.dwNumberOfProcessors - 1);
 
     if (!win_init(&app)) {
         win_deinit(&sys);
@@ -207,7 +217,7 @@ main()
             if (msg.message == WM_QUIT) break;
         } else {
             update(&app);
-            win_update(&sys);
+            win_update(&app);
         }
     }
 
