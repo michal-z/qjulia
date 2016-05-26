@@ -6,9 +6,13 @@ if exist qjulia.exe del qjulia.exe
 if exist *.pdb del *.pdb
 if exist *.obj del *.obj
 
-cl /Zi /Ox /DNDEBUG /nologo /WX /D_CRT_SECURE_NO_WARNINGS /W3 /EHa- qjulia_windows.cpp ^
-   /link kernel32.lib user32.lib gdi32.lib ^
-   /OPT:REF /INCREMENTAL:NO /SUBSYSTEM:CONSOLE /OUT:qjulia.exe
+fasm\fasm.exe qjulia_asmlib.asm
+if errorlevel 1 goto eof
+
+:: /Fm generates linker map file
+:: /Fa generates assembly listing
+cl /Zi /Ox /arch:AVX2 /Gm- /nologo /WX /W3 /GS- /Gs999999 /Gy /Gw /EHa- qjulia.c ^
+   /link qjulia_asmlib.obj kernel32.lib user32.lib gdi32.lib /OPT:REF /INCREMENTAL:NO /SUBSYSTEM:WINDOWS /ENTRY:start /NODEFAULTLIB
 
 if exist vc140.pdb del vc140.pdb
 if exist *.obj del *.obj
